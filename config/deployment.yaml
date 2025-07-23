@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-approver
+  namespace: default
+  labels:
+    app: ai-approver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-approver
+  template:
+    metadata:
+      labels:
+        app: ai-approver
+    spec:
+      serviceAccountName: ai-approver
+      containers:
+      - name: ai-approver
+        image: quay.io/khrm/ai-approver:latest
+        env:
+        - name: MODEL_NAME
+          value: "gemini/gemini-pro"
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-approver-secret
+              key: api-key
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m" 

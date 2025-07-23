@@ -51,12 +51,20 @@ def handle_approval_task(spec, name, namespace, body, logger, patch, **kwargs):
 
     logger.info(f"Processing ApprovalTask for '{AI_APPROVER_NAME}': {name}")
 
-    # Get the description from the spec
+    # Extract data from ApprovalTask
     description = spec.get("description", "")
+    labels = body.get("metadata", {}).get("labels", {})
+    
+    # Extract Tekton labels
+    pipeline_run_name = labels.get("tekton.dev/pipelineRun", "")
+    task_run_name = labels.get("tekton.dev/customRun", "")
+    pipeline_name = labels.get("tekton.dev/pipeline", "")
+    
+    logger.info(f"Extracted data - PipelineRun: {pipeline_run_name}, TaskRun: {task_run_name}, Pipeline: {pipeline_name}")
 
-    # Simple rule: Approve if "LGTM" is in the description, otherwise reject
-    decision = "approve"
-    message = "Approved automatically"
+    # Call the AI agent for decision
+    from agents import analyze_approval_task
+    decision, message = analyze_approval_task(pipeline_run_name, task_run_name, pipeline_name, description)
 
     logger.info(f"Decision for '{name}' by '{AI_APPROVER_NAME}': {decision}")
 

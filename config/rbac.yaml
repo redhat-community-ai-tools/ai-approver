@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-approver
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-approver
+rules:
+- apiGroups: ["openshift-pipelines.org"]
+  resources: ["approvaltasks"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-approver
+subjects:
+- kind: ServiceAccount
+  name: ai-approver
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: ai-approver
+  apiGroup: rbac.authorization.k8s.io 
