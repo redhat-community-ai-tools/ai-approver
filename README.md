@@ -29,8 +29,8 @@ The AI Approver is a long-running service that:
 This repository contains the Python agent and its supporting configuration.
 
 -   **`python-agent/src/main.py`**: The entrypoint for the agent, containing the main reconciliation loop.
--   **`python-agent/requirements.txt`**: The Python dependencies for the agent.
--   **`python-agent/Containerfile`**: The recipe for building the agent's container image.
+-   **`requirements.txt`**: The Python dependencies for the agent.
+-   **`Containerfile`**: The recipe for building the agent's container image.
 -   **`config/`**: Contains example Kubernetes manifests for deploying the agent.
 
 ## Getting Started
