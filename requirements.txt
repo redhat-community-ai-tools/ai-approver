@@ -1,0 +1,5 @@
+kopf
+smolagents[toolkit,litellm,mcp]
+pyyaml
+requests
+python-dotenv
