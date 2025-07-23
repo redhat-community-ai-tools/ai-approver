@@ -10,7 +10,7 @@ API_KEY = os.getenv("API_KEY", "")  # API key for the model provider
 # MCP Server Configuration
 MCP_SERVERS = {
     "kubernetes": {
-        "url": os.getenv("K8S_MCP_URL", "http://localhost:8080"),
+        "url": os.getenv("K8S_MCP_URL", "http://localhost:7007/mcp"),
         "timeout": 30
     }
 }

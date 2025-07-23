@@ -16,12 +16,10 @@ def test_agent():
     
     # Sample ApprovalTask data
     pipeline_run_name = "test-tm584"
-    task_run_name = "test-tm584-wait"
     pipeline_name = "test-tm584"
     description = "Approval Task Rocks!!!"
     
     print(f"PipelineRun: {pipeline_run_name}")
-    print(f"TaskRun: {task_run_name}")
     print(f"Pipeline: {pipeline_name}")
     print(f"Description: {description}")
     print("-" * 50)
@@ -29,7 +27,6 @@ def test_agent():
     # Run agent analysis
     decision, message = analyze_approval_task(
         pipeline_run_name, 
-        task_run_name, 
         pipeline_name, 
         description
     )
