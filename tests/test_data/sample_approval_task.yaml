@@ -1,0 +1,38 @@
+ apiVersion: tekton.dev/v1
+ kind: PipelineRun
+ metadata:
+   generateName: test-
+ spec:
+   pipelineSpec:
+     tasks:
+       - name: before
+         taskSpec:
+           steps:
+             - image: busybox
+               name: before
+               script: echo before wait
+       - name: wait
+         taskRef:
+           apiVersion: openshift-pipelines.org/v1alpha1
+           kind: ApprovalTask
+         params:
+           - name: approvers
+             value:
+               - foo
+               - bar
+               - kubernetes-admin
+           - name: numberOfApprovalsRequired
+             value: 2
+           - name: description
+             value: Approval Task Rocks!!!
+         timeout: 2m
+         runAfter: ['before']
+       - name: after
+         taskSpec:
+           steps:
+             - image: busybox
+               name: after
+               script: echo after wait
+         runAfter: ['wait']
+
+
