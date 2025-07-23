@@ -18,31 +18,31 @@ The system is designed as an intelligent, event-driven Kubernetes operator that 
 ```mermaid
 graph TD
     subgraph "Kubernetes Cluster"
-        A[ApprovalTask CR] --1. Create/Update Event--> C{Controller};
-        C --8. Patch Resource--> A;
+        A[ApprovalTask CR] --> C{Controller};
+        C --> A;
     end
 
     subgraph "AI-Approver Core Logic"
-        C --2. Invoke Analysis--> D[AI Agent];
-        D --3. Build Prompt--> P[Prompt Engine];
-        P --4. Use--> CFG[config.py];
-        D --5. Select Tools--> T[Tool Abstraction Layer];
-        D --7. Return Decision--> C;
+        C --> D[AI Agent];
+        D --> P[Prompt Engine];
+        P --> CFG[config.py];
+        D --> T[Tool Abstraction Layer];
+        D --> C;
     end
 
     subgraph "External Tools (MCPs)"
-        T --6. Execute--> K8S[Kubernetes MCP];
-        T --6. Execute--> GITHUB[GitHub MCP];
-        T --6. Execute--> PROM[Prometheus MCP];
-        T --6. Execute--> OTHERS[...]
+        T --> K8S[Kubernetes MCP];
+        T --> GITHUB[GitHub MCP];
+        T --> PROM[Prometheus MCP];
+        T --> OTHERS[...];
     end
 
     subgraph "Model Fine tuning"
-        A --a. AI Decision--> RF[Reward Function];
-        H[Human Co-Approver] --b. Human Decision--> RF;
-        RF --c. Calculate Agreement--> SIG[Training Signal];
-        SIG --d. Fine-tune--> LLM[Language Model];
-        D --uses--> LLM;
+        A --> RF[Reward Function];
+        H[Human Co-Approver] --> RF;
+        RF --> SIG[Training Signal];
+        SIG --> LLM[Language Model];
+        D --> LLM;
     end
 ```
 
