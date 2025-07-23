@@ -51,21 +51,25 @@ This repository contains the Python agent and its supporting configuration.
 
 ### Building and Deploying the Agent
 
-1.  **Build the container image:**
-    ```sh
-    podman build -t quay.io/khrm/ai-approver:latest -f python-agent/Containerfile .
-    ```
-2.  **Push the image to your registry:**
-    ```sh
-    podman push quay.io/khrm/ai-approver:latest
-    ```
-3.  **Deploy the agent to your Kubernetes cluster:**
+  **Deploy the agent to your Kubernetes cluster:**
     You will need to create a Kubernetes Deployment (and likely a ServiceAccount, Role, and RoleBinding) to run the agent. The Deployment should use the image you just built and pushed. Ensure the ServiceAccount has the necessary permissions to `get`, `list`, `watch`, and `patch` `approvaltasks` resources.
 
     Example deployment manifests can be found in the `config/` directory. You will need to customize them for your environment.
 
     ```sh
-    kubectl apply -f config/
+    ko apply -f config/
     ```
 
 Once deployed, the agent will start monitoring for `ApprovalTask` resources and acting on them according to its configuration.
+
+
+
+#### Running locally
+Assuming you have GEMINI_API_KEY setup in environment.
+```
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+export MODEL_NAME=gemini-2.5-pro-preview-05-06
+kopf run src/main.py
+```
