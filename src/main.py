@@ -1,6 +1,7 @@
 import kopf
 import logging
 from datetime import datetime, timezone
+from agents import analyze_approval_task
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -67,11 +68,13 @@ def handle_approval_task(spec, name, namespace, body, logger, patch, **kwargs):
         f"Extracted data - PipelineRun: {pipeline_run_name}, Pipeline: {pipeline_name}"
     )
 
-    # Call the AI agent for decision
-    from agents import analyze_approval_task
-
+    
+    # The agent will fetch the PipelineRun spec using the Kubernetes MCP server
+    # We pass None here and let the agent handle the fetching
+    pipeline_spec = None
+    
     decision, message = analyze_approval_task(
-        pipeline_run_name, pipeline_name, description
+        pipeline_run_name, pipeline_name, description, pipeline_spec
     )
 
     logger.info(f"Decision for '{name}' by '{AI_APPROVER_NAME}': {decision}")

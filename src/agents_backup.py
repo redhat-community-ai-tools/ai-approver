@@ -44,6 +44,7 @@ def create_pipeline_agent(tools=None):
         return None
 
 
+
 def parse_git_url(git_url):
     """
     Parse GitHub URL to extract owner and repository name
@@ -102,52 +103,45 @@ def extract_git_info_from_pipeline_spec(pipeline_spec):
 
 
 def parse_agent_decision(result):
-    """Parse the agent's decision and reasoning from the response"""
-    response = str(result)
-    response_lower = response.lower()
+    """Parse the agent's decision from the response"""
+    response = str(result).lower()
 
-    # Extract the full reasoning from the agent's response
-    reasoning = ""
-    
-    # Look for final answer patterns first (most reliable)
-    if "final answer:" in response_lower:
-        final_answer_section = response.split("Final answer:")[-1].strip()
-        if final_answer_section:
-            reasoning = final_answer_section
-    elif "decision:" in response_lower:
-        # Extract everything after "Decision:" including reasoning
-        decision_section = response.split("Decision:")[-1].strip()
-        if decision_section:
-            reasoning = decision_section
+    # Look for explicit decision statements first
+    if "decision:" in response:
+        decision_line = [
+            line for line in response.split("\n") if "decision:" in line.lower()
+        ]
+        if decision_line:
+            decision_text = decision_line[0].lower()
+            if "reject" in decision_text:
+                return "reject", "Rejected by AI agent analysis"
+            elif "approve" in decision_text:
+                return "approve", "Approved by AI agent analysis"
 
-    # Determine the decision
-    decision = "reject"  # default
-    if "approve" in response_lower:
-        decision = "approve"
-    elif "reject" in response_lower:
-        decision = "reject"
+    # Look for final answer patterns
+    if "final answer:" in response:
+        final_answer = response.split("final answer:")[-1].strip()
+        if "reject" in final_answer:
+            return "reject", "Rejected by AI agent analysis"
+        elif "approve" in final_answer:
+            return "approve", "Approved by AI agent analysis"
 
-    # Clean up the reasoning
-    if reasoning:
-        # Remove any code block markers
-        reasoning = reasoning.replace("<code>", "").replace("</code>", "")
-        # Remove final_answer function wrapper if present
-        if reasoning.startswith('final_answer("') and reasoning.endswith('")'):
-            reasoning = reasoning[13:-2]  # Remove final_answer(" and ")
-        # Clean up any extra whitespace
-        reasoning = reasoning.strip()
-        
-        # If reasoning is too long, truncate it
-        if len(reasoning) > 1000:
-            reasoning = reasoning[:997] + "..."
-    else:
-        # Fallback to generic message if no reasoning found
-        if decision == "approve":
-            reasoning = "Approved by AI agent analysis"
-        else:
-            reasoning = "Rejected by AI agent analysis"
+    # Look for decision patterns in the response
+    if "decision:" in response:
+        decision_section = response.split("decision:")[-1].split("\n")[0].strip()
+        if "reject" in decision_section:
+            return "reject", "Rejected by AI agent analysis"
+        elif "approve" in decision_section:
+            return "approve", "Approved by AI agent analysis"
 
-    return decision, reasoning
+    # Fallback: look for the first occurrence of approve/reject
+    if "reject" in response:
+        return "reject", "Rejected by AI agent analysis"
+    elif "approve" in response:
+        return "approve", "Approved by AI agent analysis"
+
+    # Default to reject if no clear decision found
+    return "reject", "No clear decision found, defaulting to reject"
 
 
 def analyze_approval_task(pipeline_run_name, pipeline_name, description, pipeline_spec=None):
@@ -179,7 +173,7 @@ def analyze_approval_task(pipeline_run_name, pipeline_name, description, pipelin
                 with MCPClient(k8s_mcp_config) as k8s_tools:
                     # Filter tools to only the ones we need
                     required_github_tools = ["list_commits", "get_commit"]
-                    required_k8s_tools = ["resources_get", "resources_list"]
+                    required_k8s_tools = ["resources_get"]
                     
                     filtered_github_tools = [tool for tool in github_tools if tool.name in required_github_tools]
                     filtered_k8s_tools = [tool for tool in k8s_tools if tool.name in required_k8s_tools]
@@ -203,66 +197,66 @@ def analyze_approval_task(pipeline_run_name, pipeline_name, description, pipelin
                         commit_info = extract_git_info_from_pipeline_spec(pipeline_spec)
                         logger.info(f"Using provided pipeline spec")
                     else:
-                        # Try to fetch PipelineRun spec using Kubernetes MCP server
-                        try:
-                            # Use the Kubernetes MCP server to fetch the PipelineRun
-                            # This will be handled by the agent using the resources_get tool
-                            logger.info(f"PipelineRun spec not provided, agent will fetch it using Kubernetes MCP server")
-                            
-                            # For now, use sample data as fallback
-                            sample_pipeline_spec = {
-                                "tasks": [
-                                    {
-                                        "taskRef": {"name": "git-clone"},
-                                        "params": [
-                                            {"name": "url", "value": "https://github.com/khrm/pipeline"},
-                                            {"name": "revision", "value": "managedBy"}
-                                        ]
-                                    }
-                                ]
-                            }
-                            commit_info = extract_git_info_from_pipeline_spec(sample_pipeline_spec)
-                            logger.info(f"Using sample pipeline spec as fallback")
-                        except Exception as e:
-                            logger.warning(f"Failed to fetch PipelineRun spec: {e}")
-                            # Use sample data as final fallback
-                            sample_pipeline_spec = {
-                                "tasks": [
-                                    {
-                                        "taskRef": {"name": "git-clone"},
-                                        "params": [
-                                            {"name": "url", "value": "https://github.com/khrm/pipeline"},
-                                            {"name": "revision", "value": "managedBy"}
-                                        ]
-                                    }
-                                ]
-                            }
-                            commit_info = extract_git_info_from_pipeline_spec(sample_pipeline_spec)
-                            logger.info(f"Using sample pipeline spec as final fallback")
-                    
-                    logger.info(f"Extracted commit info: {commit_info}")
+                    # Try to fetch PipelineRun spec using Kubernetes MCP server
+                    try:
+                        # Use the Kubernetes MCP server to fetch the PipelineRun
+                        # This will be handled by the agent using the resources_get tool
+                        logger.info(f"PipelineRun spec not provided, agent will fetch it using Kubernetes MCP server")
+                        
+                        # For now, use sample data as fallback
+                        sample_pipeline_spec = {
+                            "tasks": [
+                                {
+                                    "taskRef": {"name": "git-clone"},
+                                    "params": [
+                                        {"name": "url", "value": "https://github.com/khrm/pipeline"},
+                                        {"name": "revision", "value": "managedBy"}
+                                    ]
+                                }
+                            ]
+                        }
+                        commit_info = extract_git_info_from_pipeline_spec(sample_pipeline_spec)
+                        logger.info(f"Using sample pipeline spec as fallback")
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch PipelineRun spec: {e}")
+                        # Use sample data as final fallback
+                        sample_pipeline_spec = {
+                            "tasks": [
+                                {
+                                    "taskRef": {"name": "git-clone"},
+                                    "params": [
+                                        {"name": "url", "value": "https://github.com/khrm/pipeline"},
+                                        {"name": "revision", "value": "managedBy"}
+                                    ]
+                                }
+                            ]
+                        }
+                        commit_info = extract_git_info_from_pipeline_spec(sample_pipeline_spec)
+                        logger.info(f"Using sample pipeline spec as final fallback")
+                
+                logger.info(f"Extracted commit info: {commit_info}")
 
-                    # Build the prompt from PROMPT_CONFIG
-                    tool_list = ", ".join([tool.name for tool in all_tools])
+                # Build the prompt from PROMPT_CONFIG
+                tool_list = ", ".join([tool.name for tool in all_tools])
 
-                    prompt_parts = []
+                prompt_parts = []
 
-                    # Base prompt
-                    base_prompt = PROMPT_CONFIG.get("base_prompt", "")
-                    if base_prompt:
-                        prompt_parts.append(
-                            base_prompt.format(
-                                pipeline_run_name=pipeline_run_name,
-                                pipeline_name=pipeline_name,
-                                description=description,
-                                tool_list=tool_list,
-                            )
+                # Base prompt
+                base_prompt = PROMPT_CONFIG.get("base_prompt", "")
+                if base_prompt:
+                    prompt_parts.append(
+                        base_prompt.format(
+                            pipeline_run_name=pipeline_run_name,
+                            pipeline_name=pipeline_name,
+                            description=description,
+                            tool_list=tool_list,
                         )
+                    )
 
-                    # Add commit information to the prompt
-                    if commit_info['commit_sha']:
-                        # If we have a specific commit SHA, analyze that commit
-                        prompt_parts.append(f"""
+                # Add commit information to the prompt
+                if commit_info['commit_sha']:
+                    # If we have a specific commit SHA, analyze that commit
+                    prompt_parts.append(f"""
 COMMIT INFORMATION TO ANALYZE:
 Repository: {commit_info['repository_owner']}/{commit_info['repository_name']}
 Commit SHA: {commit_info['commit_sha']}
@@ -288,8 +282,8 @@ IMPORTANT: Use these exact values:
 - repo: {commit_info['repository_name']}  
 - sha: {commit_info['commit_sha']}
 """)
-                    else:
-                        # If we only have branch/revision info, analyze the latest changes
+                else:
+                    # If we only have branch/revision info, analyze the latest changes
                         # Create the prompt with proper string formatting
                         owner = commit_info['repository_owner']
                         repo = commit_info['repository_name']
@@ -360,56 +354,56 @@ IMPORTANT: Use these exact values:
 ERROR HANDLING: If the branch '{branch}' doesn't exist or has no commits, try the 'main' branch as a fallback.
 """)
 
-                    # Add conditional instructions from rules
-                    custom_instructions = []
-                    for rule in PROMPT_CONFIG.get("rules", []):
-                        field_name = rule.get("field")
-                        contains_value = rule.get("contains")
-                        instruction = rule.get("instruction")
+                # Add conditional instructions from rules
+                custom_instructions = []
+                for rule in PROMPT_CONFIG.get("rules", []):
+                    field_name = rule.get("field")
+                    contains_value = rule.get("contains")
+                    instruction = rule.get("instruction")
 
-                        field_value = ""
-                        if field_name == "pipeline_name":
-                            field_value = pipeline_name
-                        elif field_name == "description":
-                            field_value = description
+                    field_value = ""
+                    if field_name == "pipeline_name":
+                        field_value = pipeline_name
+                    elif field_name == "description":
+                        field_value = description
 
-                        if (
-                            contains_value
-                            and instruction
-                            and contains_value.lower() in field_value.lower()
-                        ):
-                            custom_instructions.append(instruction)
+                    if (
+                        contains_value
+                        and instruction
+                        and contains_value.lower() in field_value.lower()
+                    ):
+                        custom_instructions.append(instruction)
 
-                    if custom_instructions:
-                        prompt_parts.append(
-                            "\nAdditionally, pay close attention to the following:"
-                        )
-                        for instr in custom_instructions:
-                            prompt_parts.append(f"- {instr}")
-
-                    # Add considerations
-                    if PROMPT_CONFIG.get("considerations"):
-                        prompt_parts.append("\nConsider:")
-                        for consideration in PROMPT_CONFIG["considerations"]:
-                            prompt_parts.append(f"- {consideration}")
-
-                    # Add output format instruction
-                    output_instruction = PROMPT_CONFIG.get("output_format_instruction", "")
-                    if output_instruction:
-                        prompt_parts.append(output_instruction)
-
-                    prompt = "\n".join(prompt_parts)
-
-                    logger.info(
-                        f"Running agent analysis with MCP tools for pipeline: {pipeline_run_name}"
+                if custom_instructions:
+                    prompt_parts.append(
+                        "\nAdditionally, pay close attention to the following:"
                     )
-                    result = agent.run(prompt)
+                    for instr in custom_instructions:
+                        prompt_parts.append(f"- {instr}")
 
-                    # Parse the result using improved logic
-                    decision, message = parse_agent_decision(result)
+                # Add considerations
+                if PROMPT_CONFIG.get("considerations"):
+                    prompt_parts.append("\nConsider:")
+                    for consideration in PROMPT_CONFIG["considerations"]:
+                        prompt_parts.append(f"- {consideration}")
 
-                    logger.info(f"Agent decision: {decision} - {message}")
-                    return decision, message
+                # Add output format instruction
+                output_instruction = PROMPT_CONFIG.get("output_format_instruction", "")
+                if output_instruction:
+                    prompt_parts.append(output_instruction)
+
+                prompt = "\n".join(prompt_parts)
+
+                logger.info(
+                    f"Running agent analysis with MCP tools for pipeline: {pipeline_run_name}"
+                )
+                result = agent.run(prompt)
+
+                # Parse the result using improved logic
+                decision, message = parse_agent_decision(result)
+
+                logger.info(f"Agent decision: {decision} - {message}")
+                return decision, message
 
         except Exception as mcp_error:
             logger.warning(f"MCP connection failed: {mcp_error}")
@@ -522,4 +516,4 @@ Note: GitHub MCP tools are not available, so this is a basic analysis based on t
         
     except Exception as e:
         logger.error(f"Error in agent analysis: {e}")
-        return "reject", f"Error in analysis: {str(e)}"
+        return "reject", f"Error in analysis: {str(e)}" 

@@ -102,52 +102,45 @@ def extract_git_info_from_pipeline_spec(pipeline_spec):
 
 
 def parse_agent_decision(result):
-    """Parse the agent's decision and reasoning from the response"""
-    response = str(result)
-    response_lower = response.lower()
+    """Parse the agent's decision from the response"""
+    response = str(result).lower()
 
-    # Extract the full reasoning from the agent's response
-    reasoning = ""
-    
-    # Look for final answer patterns first (most reliable)
-    if "final answer:" in response_lower:
-        final_answer_section = response.split("Final answer:")[-1].strip()
-        if final_answer_section:
-            reasoning = final_answer_section
-    elif "decision:" in response_lower:
-        # Extract everything after "Decision:" including reasoning
-        decision_section = response.split("Decision:")[-1].strip()
-        if decision_section:
-            reasoning = decision_section
+    # Look for explicit decision statements first
+    if "decision:" in response:
+        decision_line = [
+            line for line in response.split("\n") if "decision:" in line.lower()
+        ]
+        if decision_line:
+            decision_text = decision_line[0].lower()
+            if "reject" in decision_text:
+                return "reject", "Rejected by AI agent analysis"
+            elif "approve" in decision_text:
+                return "approve", "Approved by AI agent analysis"
 
-    # Determine the decision
-    decision = "reject"  # default
-    if "approve" in response_lower:
-        decision = "approve"
-    elif "reject" in response_lower:
-        decision = "reject"
+    # Look for final answer patterns
+    if "final answer:" in response:
+        final_answer = response.split("final answer:")[-1].strip()
+        if "reject" in final_answer:
+            return "reject", "Rejected by AI agent analysis"
+        elif "approve" in final_answer:
+            return "approve", "Approved by AI agent analysis"
 
-    # Clean up the reasoning
-    if reasoning:
-        # Remove any code block markers
-        reasoning = reasoning.replace("<code>", "").replace("</code>", "")
-        # Remove final_answer function wrapper if present
-        if reasoning.startswith('final_answer("') and reasoning.endswith('")'):
-            reasoning = reasoning[13:-2]  # Remove final_answer(" and ")
-        # Clean up any extra whitespace
-        reasoning = reasoning.strip()
-        
-        # If reasoning is too long, truncate it
-        if len(reasoning) > 1000:
-            reasoning = reasoning[:997] + "..."
-    else:
-        # Fallback to generic message if no reasoning found
-        if decision == "approve":
-            reasoning = "Approved by AI agent analysis"
-        else:
-            reasoning = "Rejected by AI agent analysis"
+    # Look for decision patterns in the response
+    if "decision:" in response:
+        decision_section = response.split("decision:")[-1].split("\n")[0].strip()
+        if "reject" in decision_section:
+            return "reject", "Rejected by AI agent analysis"
+        elif "approve" in decision_section:
+            return "approve", "Approved by AI agent analysis"
 
-    return decision, reasoning
+    # Fallback: look for the first occurrence of approve/reject
+    if "reject" in response:
+        return "reject", "Rejected by AI agent analysis"
+    elif "approve" in response:
+        return "approve", "Approved by AI agent analysis"
+
+    # Default to reject if no clear decision found
+    return "reject", "No clear decision found, defaulting to reject"
 
 
 def analyze_approval_task(pipeline_run_name, pipeline_name, description, pipeline_spec=None):
@@ -179,7 +172,7 @@ def analyze_approval_task(pipeline_run_name, pipeline_name, description, pipelin
                 with MCPClient(k8s_mcp_config) as k8s_tools:
                     # Filter tools to only the ones we need
                     required_github_tools = ["list_commits", "get_commit"]
-                    required_k8s_tools = ["resources_get", "resources_list"]
+                    required_k8s_tools = ["resources_get"]
                     
                     filtered_github_tools = [tool for tool in github_tools if tool.name in required_github_tools]
                     filtered_k8s_tools = [tool for tool in k8s_tools if tool.name in required_k8s_tools]
@@ -287,6 +280,45 @@ IMPORTANT: Use these exact values:
 - owner: {commit_info['repository_owner']}
 - repo: {commit_info['repository_name']}  
 - sha: {commit_info['commit_sha']}
+
+CLUSTER RESOURCE ANALYSIS - CRITICAL STEP:
+Before making your final decision, you MUST check the current cluster state:
+
+```python
+import json
+
+# Step 1: Check current PipelineRuns in the cluster
+pipeline_runs = resources_get(apiVersion="tekton.dev/v1", kind="PipelineRun", namespace="default")
+pipeline_runs_data = json.loads(pipeline_runs)
+current_pipeline_count = len(pipeline_runs_data.get('items', []))
+
+# Step 2: Check current Pods in the cluster
+pods = resources_get(apiVersion="v1", kind="Pod", namespace="default")
+pods_data = json.loads(pods)
+current_pod_count = len(pods_data.get('items', []))
+
+# Step 3: Check cluster nodes for capacity
+nodes = resources_get(apiVersion="v1", kind="Node", namespace="")
+nodes_data = json.loads(nodes)
+node_count = len(nodes_data.get('items', []))
+
+print(f"Current cluster state:")
+print(f"- PipelineRuns: {current_pipeline_count}")
+print(f"- Pods: {current_pod_count}")
+print(f"- Nodes: {node_count}")
+
+# Step 4: Analyze resource impact
+if current_pipeline_count > 10:
+    print("WARNING: High number of existing PipelineRuns. Consider cluster load.")
+if current_pod_count > 50:
+    print("WARNING: High number of existing Pods. Check resource availability.")
+```
+
+RESOURCE THRESHOLDS FOR DECISION MAKING:
+- If PipelineRuns > 15: Consider rejecting due to high cluster load
+- If Pods > 100: Consider rejecting due to resource constraints
+- If Nodes < 2: Consider rejecting due to limited capacity
+- Always factor in the resource requirements of the new PipelineRun
 """)
                     else:
                         # If we only have branch/revision info, analyze the latest changes
@@ -358,6 +390,45 @@ IMPORTANT: Use these exact values:
 - branch: {branch}
 
 ERROR HANDLING: If the branch '{branch}' doesn't exist or has no commits, try the 'main' branch as a fallback.
+
+CLUSTER RESOURCE ANALYSIS - CRITICAL STEP:
+Before making your final decision, you MUST check the current cluster state:
+
+```python
+import json
+
+# Step 1: Check current PipelineRuns in the cluster
+pipeline_runs = resources_get(apiVersion="tekton.dev/v1", kind="PipelineRun", namespace="default")
+pipeline_runs_data = json.loads(pipeline_runs)
+current_pipeline_count = len(pipeline_runs_data.get('items', []))
+
+# Step 2: Check current Pods in the cluster
+pods = resources_get(apiVersion="v1", kind="Pod", namespace="default")
+pods_data = json.loads(pods)
+current_pod_count = len(pods_data.get('items', []))
+
+# Step 3: Check cluster nodes for capacity
+nodes = resources_get(apiVersion="v1", kind="Node", namespace="")
+nodes_data = json.loads(nodes)
+node_count = len(nodes_data.get('items', []))
+
+print(f"Current cluster state:")
+print(f"- PipelineRuns: {current_pipeline_count}")
+print(f"- Pods: {current_pod_count}")
+print(f"- Nodes: {node_count}")
+
+# Step 4: Analyze resource impact
+if current_pipeline_count > 10:
+    print("WARNING: High number of existing PipelineRuns. Consider cluster load.")
+if current_pod_count > 50:
+    print("WARNING: High number of existing Pods. Check resource availability.")
+```
+
+RESOURCE THRESHOLDS FOR DECISION MAKING:
+- If PipelineRuns > 15: Consider rejecting due to high cluster load
+- If Pods > 100: Consider rejecting due to resource constraints
+- If Nodes < 2: Consider rejecting due to limited capacity
+- Always factor in the resource requirements of the new PipelineRun
 """)
 
                     # Add conditional instructions from rules
@@ -467,6 +538,13 @@ Branch/Revision: {branch}
 Git URL: {commit_info['git_url']}
 
 Note: GitHub MCP tools are not available, so this is a basic analysis based on the description and pipeline information only.
+
+CLUSTER RESOURCE ANALYSIS (Limited in Fallback Mode):
+Since MCP tools are not available, you cannot check real-time cluster resources. However, you should still consider:
+- The potential resource impact of the new PipelineRun
+- Whether this appears to be a resource-intensive operation
+- The description and pipeline name for clues about resource requirements
+- Default to being more conservative with approvals when cluster state is unknown
 """)
 
             # Add conditional instructions from rules

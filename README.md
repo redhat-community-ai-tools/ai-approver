@@ -52,8 +52,8 @@ graph TD
 2.  **Controller (`src/main.py`)**: The Controller, powered by the `kopf` framework, receives the `ApprovalTask` event and initiates the analysis by invoking the **AI Agent**.
 3.  **AI Agent (`src/agents.py`)**: The core decision-making component. It uses a **Prompt Engine** to construct a detailed, context-rich prompt for the Language Model (LLM), dynamically built from templates and rules in `src/config.py`.
 4.  **Tool Abstraction Layer**: The agent connects to a **Tool Abstraction Layer** that interfaces with multiple **Machine Control Programs (MCPs)**. This allows it to gather real-time data from various sources:
-    *   **Kubernetes MCP**: Provides tools to query live data from the Kubernetes API (e.g., check pod status, resource usage).
-    *   **GitHub MCP (Future)**: Will provide tools to inspect source code, check pull requests, and analyze commit history.
+    *   **GitHub MCP**: Provides tools to inspect source code, check pull requests, analyze commit history, and detect security vulnerabilities.
+    *   **Kubernetes MCP (Legacy)**: Previously used for querying live data from the Kubernetes API (e.g., check pod status, resource usage).
     *   **Prometheus MCP (Future)**: Will provide tools to query metrics, check for active alerts, and assess system load.
 5.  **Analysis and Decision**: The agent uses the selected tools to gather live data, analyzes it, and generates an `approve` or `reject` decision.
 6.  **Patching the Resource**: The Controller receives the decision and patches the original `ApprovalTask` CR, updating it with the AI's input.
@@ -123,3 +123,52 @@ The agent's behavior is primarily configured in `src/config.py`. The `PROMPT_CON
 *   **`output_format_instruction`**: Defines how the LLM should structure its response to make it easily parsable.
 
 By modifying this configuration, you can tailor the agent's decision-making process to your organization's specific needs and policies.
+
+## GitHub MCP Integration
+
+The AI Approver now uses the [GitHub MCP Server](https://github.com/github/github-mcp-server) to analyze code changes in PipelineRuns. This provides powerful code analysis capabilities including:
+
+- **Code Quality Analysis**: Check for best practices, coding standards, and potential issues
+- **Security Vulnerability Detection**: Identify security issues in code changes
+- **Commit Analysis**: Review commit messages, changes, and impact
+- **Repository Insights**: Access to pull requests, issues, and repository metadata
+
+### Setup GitHub MCP
+
+1. **Create GitHub Personal Access Token**:
+   - Go to [GitHub Settings > Personal Access Tokens](https://github.com/settings/tokens)
+   - Create a token with `repo`, `read:org`, and `read:user` scopes
+
+2. **Set Environment Variables**:
+   ```bash
+   export GITHUB_PERSONAL_ACCESS_TOKEN=your_token_here
+   export GITHUB_MCP_URL=http://localhost:3001/mcp
+   ```
+
+3. **Start GitHub MCP Server**:
+   ```bash
+   ./scripts/setup_github_mcp.sh
+   ```
+
+### PipelineRun Configuration
+
+Your Pipeline should include a `git-clone` task with the repository information:
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: my-pipeline
+spec:
+  tasks:
+  - name: fetch-from-git
+    taskRef:
+      name: git-clone
+    params:
+    - name: url
+      value: https://github.com/owner/repo.git
+    - name: revision
+      value: main
+```
+
+For detailed setup instructions, see [GitHub MCP Integration Guide](docs/GITHUB_MCP_INTEGRATION.md).
