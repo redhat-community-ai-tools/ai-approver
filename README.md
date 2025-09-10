@@ -52,8 +52,8 @@ graph TD
 2.  **Controller (`src/main.py`)**: The Controller, powered by the `kopf` framework, receives the `ApprovalTask` event and initiates the analysis by invoking the **AI Agent**.
 3.  **AI Agent (`src/agents.py`)**: The core decision-making component. It uses a **Prompt Engine** to construct a detailed, context-rich prompt for the Language Model (LLM), dynamically built from templates and rules in `src/config.py`.
 4.  **Tool Abstraction Layer**: The agent connects to a **Tool Abstraction Layer** that interfaces with multiple **Machine Control Programs (MCPs)**. This allows it to gather real-time data from various sources:
-    *   **Kubernetes MCP**: Provides tools to query live data from the Kubernetes API (e.g., check pod status, resource usage).
-    *   **GitHub MCP (Future)**: Will provide tools to inspect source code, check pull requests, and analyze commit history.
+    *   **GitHub MCP**: Provides tools to inspect source code, check pull requests, analyze commit history, and detect security vulnerabilities.
+    *   **Kubernetes MCP (Legacy)**: Previously used for querying live data from the Kubernetes API (e.g., check pod status, resource usage).
     *   **Prometheus MCP (Future)**: Will provide tools to query metrics, check for active alerts, and assess system load.
 5.  **Analysis and Decision**: The agent uses the selected tools to gather live data, analyzes it, and generates an `approve` or `reject` decision.
 6.  **Patching the Resource**: The Controller receives the decision and patches the original `ApprovalTask` CR, updating it with the AI's input.
@@ -75,43 +75,45 @@ To ensure the AI-Approver's decisions improve over time, a training loop is a co
 *   Tekton Pipelines installed on the cluster.
 *   The `ApprovalTask` CRD from the [openshift-pipelines/manual-approval-gate](https://github.com/openshift-pipelines/manual-approval-gate) project installed on the cluster.
 
-### Installation & Configuration
+### Prerequisites
 
-1.  **Clone the repository:**
+-   A running Kubernetes cluster.
+-   Tekton Pipelines installed on the cluster.
+-   The `ApprovalTask` CRD from the [openshift-pipelines/manual-approval-gate](https://github.com/openshift-pipelines/manual-approval-gate) project must be installed on the cluster.
+-   A container registry (like Docker Hub, GCR, or Quay.io) to store the agent's image.
+
+### Configuration
+
+1.  Edit `python-agent/config.yaml` to define the agent's behavior. You will need to specify:
+    -   The Kubernetes namespace(s) the agent should monitor.
+    -   The name of the user or ServiceAccount the agent will use for approvals.
+    -   The logic or rules for making approval/rejection decisions.
+
+### Building and Deploying the Agent
+
+  **Deploy the agent to your Kubernetes cluster:**
+    You will need to create a Kubernetes Deployment (and likely a ServiceAccount, Role, and RoleBinding) to run the agent. The Deployment should use the image you just built and pushed. Ensure the ServiceAccount has the necessary permissions to `get`, `list`, `watch`, and `patch` `approvaltasks` resources.
+
+    Example deployment manifests can be found in the `config/` directory. You will need to customize them for your environment.
+
     ```sh
-    git clone https://github.com/khrm/ai-approver.git
-    cd ai-approver
+    ko apply -f config/
     ```
 
-2.  **Set up a virtual environment and install dependencies:**
-    ```sh
-    python -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
-    ```
+Once deployed, the agent will start monitoring for `ApprovalTask` resources and acting on them according to its configuration.
 
-3.  **Configure environment variables:**
-    Create a `.env` file by copying the example:
-    ```sh
-    cp env.example .env
-    ```
-    Edit the `.env` file to add your credentials:
-    ```
-    # .env
-    MODEL_NAME=gemini/gemini-pro  # Or gpt-4, llama3.1, etc.
-    API_KEY=your_llm_api_key_here
-    K8S_MCP_URL=http://localhost:7007/mcp # URL of your Kubernetes MCP server
-    ```
 
-### Running the Operator
 
-Run the operator locally using `kopf`. It will automatically use your local `kubeconfig` to connect to the cluster.
-
-```sh
-kopf run src/main.py --namespace=your-target-namespace
+#### Running locally
+Assuming you have GEMINI_API_KEY setup in environment.
+```
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+export MODEL_NAME=gemini-2.5-pro-preview-05-06
+kopf run src/main.py
 ```
 
-The operator will now be watching for `ApprovalTask` resources in the specified namespace.
 
 ## Configuration
 
@@ -123,3 +125,35 @@ The agent's behavior is primarily configured in `src/config.py`. The `PROMPT_CON
 *   **`output_format_instruction`**: Defines how the LLM should structure its response to make it easily parsable.
 
 By modifying this configuration, you can tailor the agent's decision-making process to your organization's specific needs and policies.
+
+### Setup GitHub MCP
+
+1. **Create GitHub Personal Access Token**:
+   - Go to [GitHub Settings > Personal Access Tokens](https://github.com/settings/tokens)
+   - Create a token with `repo`, `read:org`, and `read:user` scopes
+
+2. **Set Environment Variables**:
+   ```bash
+   export GITHUB_PERSONAL_ACCESS_TOKEN=your_token_here
+   ```
+
+### PipelineRun Configuration
+
+Your Pipeline should include a `git-clone` task with the repository information:
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: my-pipeline
+spec:
+  tasks:
+  - name: fetch-from-git
+    taskRef:
+      name: git-clone
+    params:
+    - name: url
+      value: https://github.com/owner/repo.git
+    - name: revision
+      value: main
+```
